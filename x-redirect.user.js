@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Redirect X/Twitter to a chosen instance
 // @namespace   local.redirect.xcancel
-// @version     2.0.0
+// @version     1.0.0
 // @author      Amqx
 // @description Redirects x.com / twitter.com to a Nitter instance you configure. Does nothing until an instance is set.
 // @match       *://x.com/*
@@ -15,6 +15,8 @@
 // @grant       GM_deleteValue
 // @grant       GM_registerMenuCommand
 // @run-at      document-start
+// @updateURL   https://raw.githubusercontent.com/Amqx/x-redirect/refs/heads/master/x-redirect.user.js
+// @downloadURL https://raw.githubusercontent.com/Amqx/x-redirect/refs/heads/master/x-redirect.user.js
 // ==/UserScript==
 
 (function () {
