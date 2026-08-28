@@ -1,5 +1,7 @@
 # X-Redirect
 
+[Install](https://raw.githubusercontent.com/Amqx/x-redirect/refs/heads/master/x-redirect.user.js)
+
 Small user script that matches Twitter/X domains and redirects to a Nitter instance.
 
 This does not bundle an instance - you must provide one. The script doesn't do
