@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Redirect X/Twitter to a chosen instance
 // @namespace   local.redirect.xcancel
-// @version     1.0.0
+// @version     1.1.0
 // @author      Amqx
 // @description Redirects x.com / twitter.com to a Nitter instance you configure. Does nothing until an instance is set.
 // @match       *://x.com/*
@@ -23,6 +23,7 @@
   'use strict';
 
   const STORE_KEY = 'instance';
+  const SETTINGS_PARAM = 'x_redirect_settings';
 
   function normalise(input) {
     if (typeof input !== 'string') return null;
@@ -59,21 +60,21 @@
     );
 
     // Cancelled — leave the existing setting alone.
-    if (answer === null) return getInstance();
+    if (answer === null) return { changed: false, instance: getInstance() };
 
     if (!answer.trim()) {
       GM_deleteValue(STORE_KEY);
-      return null;
+      return { changed: true, instance: null };
     }
 
     const instance = normalise(answer);
     if (!instance) {
       window.alert('"' + answer + '" is not a valid host. Nothing was saved.');
-      return getInstance();
+      return { changed: false, instance: getInstance() };
     }
 
     GM_setValue(STORE_KEY, instance);
-    return instance;
+    return { changed: true, instance };
   }
 
   function redirect(instance) {
@@ -93,14 +94,26 @@
   }
 
   GM_registerMenuCommand('Set redirect instance…', function () {
-    const instance = setInstance();
-    if (instance) redirect(instance);
+    const result = setInstance();
+    if (result.changed && result.instance) redirect(result.instance);
   });
 
   GM_registerMenuCommand('Clear redirect instance', function () {
     GM_deleteValue(STORE_KEY);
     window.alert('Redirect instance cleared. x.com / twitter.com will load normally.');
   });
+
+  // This URL remains reachable even when an instance is already configured.
+  if (new URLSearchParams(window.location.search).has(SETTINGS_PARAM)) {
+    const result = setInstance();
+    if (result.changed && result.instance) {
+      // Go to the new instance without forwarding the settings query string.
+      window.location.replace(result.instance);
+    } else if (result.changed) {
+      window.alert('Redirect instance cleared. x.com / twitter.com will load normally.');
+    }
+    return;
+  }
 
   const instance = getInstance();
 
@@ -109,6 +122,6 @@
   } else {
     console.warn('[x-redirect] No instance configured — not redirecting.');
     const chosen = setInstance();
-    if (chosen) redirect(chosen);
+    if (chosen.instance) redirect(chosen.instance);
   }
 })();
