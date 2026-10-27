@@ -1,9 +1,9 @@
 // ==UserScript==
 // @name        Redirect X/Twitter to a chosen instance
 // @namespace   local.redirect.xcancel
-// @version     1.1.0
+// @version     1.2.0
 // @author      Amqx
-// @description Redirects x.com / twitter.com to a Nitter instance you configure. Does nothing until an instance is set.
+// @description Redirects x.com / twitter.com to a Nitter instance you configure.
 // @match       *://x.com/*
 // @match       *://www.x.com/*
 // @match       *://mobile.x.com/*
@@ -14,6 +14,8 @@
 // @grant       GM_setValue
 // @grant       GM_deleteValue
 // @grant       GM_registerMenuCommand
+// @grant       GM_xmlhttpRequest
+// @connect     *
 // @run-at      document-start
 // @updateURL   https://raw.githubusercontent.com/Amqx/x-redirect/refs/heads/master/x-redirect.user.js
 // @downloadURL https://raw.githubusercontent.com/Amqx/x-redirect/refs/heads/master/x-redirect.user.js
@@ -22,8 +24,11 @@
 (function () {
   'use strict';
 
+  // The primary keeps the original key so existing settings carry over.
   const STORE_KEY = 'instance';
+  const BACKUP_KEY = 'backup';
   const SETTINGS_PARAM = 'x_redirect_settings';
+  const PROBE_TIMEOUT_MS = 3000;
 
   function normalise(input) {
     if (typeof input !== 'string') return null;
@@ -46,35 +51,79 @@
     return 'https://' + url.host + base;
   }
 
-  function getInstance() {
-    return normalise(GM_getValue(STORE_KEY, ''));
+  function getInstances() {
+    return {
+      primary: normalise(GM_getValue(STORE_KEY, '')),
+      backup: normalise(GM_getValue(BACKUP_KEY, '')),
+    };
   }
 
-  function setInstance() {
-    const current = GM_getValue(STORE_KEY, '');
+  // Returns the new value for one slot.
+  function askFor(label, key) {
     const answer = window.prompt(
-      'Redirect x.com / twitter.com to which instance?\n' +
+      'Redirect x.com / twitter.com to which ' + label + ' instance?\n' +
       'Example: nitter.example.com\n\n' +
-      'Leave empty to disable redirecting.',
-      current
+      'Leave empty for none.',
+      GM_getValue(key, '')
     );
 
-    // Cancelled — leave the existing setting alone.
-    if (answer === null) return { changed: false, instance: getInstance() };
-
-    if (!answer.trim()) {
-      GM_deleteValue(STORE_KEY);
-      return { changed: true, instance: null };
-    }
+    if (answer === null) return undefined;
+    if (!answer.trim()) return null;
 
     const instance = normalise(answer);
     if (!instance) {
       window.alert('"' + answer + '" is not a valid host. Nothing was saved.');
-      return { changed: false, instance: getInstance() };
+      return undefined;
     }
+    return instance;
+  }
 
-    GM_setValue(STORE_KEY, instance);
-    return { changed: true, instance };
+  function store(key, value) {
+    if (value) GM_setValue(key, value);
+    else GM_deleteValue(key);
+  }
+
+  function setInstances() {
+    // Cancelling either prompt leaves both settings untouched.
+    const primary = askFor('primary', STORE_KEY);
+    if (primary === undefined) return { changed: false, instances: getInstances() };
+
+    const backup = askFor('backup (used when the primary is unreachable)', BACKUP_KEY);
+    if (backup === undefined) return { changed: false, instances: getInstances() };
+
+    store(STORE_KEY, primary);
+    store(BACKUP_KEY, backup);
+    return { changed: true, instances: getInstances() };
+  }
+
+  function clearInstances() {
+    GM_deleteValue(STORE_KEY);
+    GM_deleteValue(BACKUP_KEY);
+  }
+
+  // Any HTTP response at all counts as reachable.
+  function isReachable(instance) {
+    return new Promise(function (resolve) {
+      GM_xmlhttpRequest({
+        method: 'HEAD',
+        url: instance + '/',
+        timeout: PROBE_TIMEOUT_MS,
+        onload: function () { resolve(true); },
+        onerror: function () { resolve(false); },
+        ontimeout: function () { resolve(false); },
+        onabort: function () { resolve(false); },
+      });
+    });
+  }
+
+  async function pickInstance(instances) {
+    const { primary, backup } = instances;
+    if (!primary || !backup) return primary || backup;
+    return (await isReachable(primary)) ? primary : backup;
+  }
+
+  function hasInstance(instances) {
+    return Boolean(instances.primary || instances.backup);
   }
 
   function redirect(instance) {
@@ -93,35 +142,42 @@
     here.replace(target.toString());
   }
 
-  GM_registerMenuCommand('Set redirect instance…', function () {
-    const result = setInstance();
-    if (result.changed && result.instance) redirect(result.instance);
+  async function redirectToBest(instances) {
+    const instance = await pickInstance(instances);
+    if (instance) redirect(instance);
+  }
+
+  GM_registerMenuCommand('Set redirect instances…', function () {
+    const result = setInstances();
+    if (result.changed) redirectToBest(result.instances);
   });
 
-  GM_registerMenuCommand('Clear redirect instance', function () {
-    GM_deleteValue(STORE_KEY);
-    window.alert('Redirect instance cleared. x.com / twitter.com will load normally.');
+  GM_registerMenuCommand('Clear redirect instances', function () {
+    clearInstances();
+    window.alert('Redirect instances cleared. x.com / twitter.com will load normally.');
   });
 
   // This URL remains reachable even when an instance is already configured.
   if (new URLSearchParams(window.location.search).has(SETTINGS_PARAM)) {
-    const result = setInstance();
-    if (result.changed && result.instance) {
+    const result = setInstances();
+    if (result.changed && hasInstance(result.instances)) {
       // Go to the new instance without forwarding the settings query string.
-      window.location.replace(result.instance);
+      pickInstance(result.instances).then(function (instance) {
+        window.location.replace(instance);
+      });
     } else if (result.changed) {
-      window.alert('Redirect instance cleared. x.com / twitter.com will load normally.');
+      window.alert('Redirect instances cleared. x.com / twitter.com will load normally.');
     }
     return;
   }
 
-  const instance = getInstance();
+  const instances = getInstances();
 
-  if (instance) {
-    redirect(instance);
+  if (hasInstance(instances)) {
+    redirectToBest(instances);
   } else {
     console.warn('[x-redirect] No instance configured — not redirecting.');
-    const chosen = setInstance();
-    if (chosen.instance) redirect(chosen.instance);
+    const chosen = setInstances();
+    if (chosen.changed) redirectToBest(chosen.instances);
   }
 })();
