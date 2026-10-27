@@ -28,7 +28,8 @@ Your userscript manager may ask once for permission to connect to the primary ho
 
 Open the [redirect settings page](https://x.com/?x_redirect_settings=1) to change or clear the instances. You can bookmark that link for later. You are asked for the primary, then the backup. Enter a host to save it, leave a field empty to unset that one, or cancel either prompt to keep the current settings. Leaving both empty disables redirecting. After saving, the page opens the chosen instance.
 
-The userscript manager's menu also provides these commands on matched pages:
+The userscript manager's menu also provides these commands on X/Twitter pages and on
+your configured instances, so you can change settings after being redirected:
 
 - **Set redirect instances…** — enter the primary and backup hosts (empty input unsets one).
 - **Clear redirect instances** — forget both; `x.com` / `twitter.com` no longer redirect.

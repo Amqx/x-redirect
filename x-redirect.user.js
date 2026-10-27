@@ -1,15 +1,10 @@
 // ==UserScript==
 // @name        Redirect X/Twitter to a chosen instance
 // @namespace   local.redirect.xcancel
-// @version     1.2.0
+// @version     1.3.0
 // @author      Amqx
 // @description Redirects x.com / twitter.com to a Nitter instance you configure.
-// @match       *://x.com/*
-// @match       *://www.x.com/*
-// @match       *://mobile.x.com/*
-// @match       *://twitter.com/*
-// @match       *://www.twitter.com/*
-// @match       *://mobile.twitter.com/*
+// @match       *://*/*
 // @grant       GM_getValue
 // @grant       GM_setValue
 // @grant       GM_deleteValue
@@ -29,6 +24,10 @@
   const BACKUP_KEY = 'backup';
   const SETTINGS_PARAM = 'x_redirect_settings';
   const PROBE_TIMEOUT_MS = 3000;
+  const X_HOSTS = [
+    'x.com', 'www.x.com', 'mobile.x.com',
+    'twitter.com', 'www.twitter.com', 'mobile.twitter.com',
+  ];
 
   function normalise(input) {
     if (typeof input !== 'string') return null;
@@ -147,6 +146,15 @@
     if (instance) redirect(instance);
   }
 
+  const instances = getInstances();
+  const host = window.location.host.toLowerCase();
+  const onX = X_HOSTS.includes(window.location.hostname.toLowerCase());
+  const onInstance = [instances.primary, instances.backup].some(function (instance) {
+    return instance && new URL(instance).host.toLowerCase() === host;
+  });
+
+  if (!onX && !onInstance) return;
+
   GM_registerMenuCommand('Set redirect instances…', function () {
     const result = setInstances();
     if (result.changed) redirectToBest(result.instances);
@@ -156,6 +164,9 @@
     clearInstances();
     window.alert('Redirect instances cleared. x.com / twitter.com will load normally.');
   });
+
+  // On an instance page only the menu is needed.
+  if (!onX) return;
 
   // This URL remains reachable even when an instance is already configured.
   if (new URLSearchParams(window.location.search).has(SETTINGS_PARAM)) {
@@ -170,8 +181,6 @@
     }
     return;
   }
-
-  const instances = getInstances();
 
   if (hasInstance(instances)) {
     redirectToBest(instances);
